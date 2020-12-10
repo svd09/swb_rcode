@@ -112,11 +112,122 @@ estimates_mumbai_recent <- EpiNow2::epinow(reported_cases = mumbai_recent_tab,
 # takes a very long time ... save the results so that do not need to repeat again.
 # set the credible interval using 
 
+# extract the Rt results...
 
-Rt_tab = summary(estimates, type = "parameters", params = "R")
+
+Rt_tab = summary(estimates_mumbai_recent, type = "parameters", params = 'R')
 
 
-write.csv(Rt_tab, "E:/swb_covid/test_result.csv")
+Rt_tab
+
+# save the Rt_tab from the new epi function...
+
+write.csv(Rt_tab, "E:/swb_covid/test_result_newepi.csv")
+
+
+### now code till here is based on the new EpiNow2 package.
+###################
+# DOUBLING TIME   #
+###################
+
+
+# needed  for calculating the doubling time.
+# total_cases = total_cases confirmed.
+# case_dates = date for the cases.
+# time gap - gap in days to account for
+# alpha = confidence interval to calculate (0.95 - default)
+
+
+compute_doubling_time <- function(total_cases, case_dates, time.gap, alpha=0.05){
+  suppressMessages(require(dplyr))
+  
+  data_tab = data.frame(date = case_dates, tot_cases = total_cases )
+  
+  delta_case = data_tab[-1,2] - data_tab[-dim(data_tab)[1],2] 
+  
+  dat = data_tab
+  
+  t.gap = time.gap
+  
+  #	dbl_timr <- function(dat,  t.gap = time.gap) {
+  
+  #if (is.null(end_date)) {
+  #    end_date <- max(dat$date)
+  #  }
+  
+  #t.start <-  dat %>% filter(date == as.Date(as.Date(end_date, origin="1970-01-01") - t.gap)) %>% pull(tot_cases)
+  #n = length(data$date)
+  
+  #t.start = as.Date(data$date[-seq(n-time + 1, n)], origin="1970-01-01")
+  #  if (length(t.start) == 0) {
+  #    NA
+  # } else if (t.start == 0) {
+  #    NA
+  #  } else {
+  #    t.end   <- data %>% filter(date == as.Date(end_date, origin="1970-01-01")) %>% pull(tot_cases)
+  #t.end <- as.Date(data$date[-seq(1, time)], origin="1970-01-01")
+  # }
+  
+  
+  end.time   <- dat$date + t.gap
+  
+  end.time   <- end.time[which(end.time %in% dat$date)]
+  
+  t.end   <- dat$tot_cases[which(dat$date %in%  end.time)]
+  
+  start.time <- dat$date[seq(1, length(t.end))]
+  
+  t.start <- dat$tot_cases[seq(1, length(t.end))]
+  
+  if(length(t.start) != length(t.end)){
+    message("check the date")
+    break
+  }
+  
+  
+  r <- ((t.end - t.start) / t.start) 
+  dt <- time.gap * (log(2) / log(1 + (r)))
+  
+  r_d <- (dat$tot_cases[-1] - dat$tot_cases[-length(dat$tot_cases)] )/dat$tot_cases[-length(dat$tot_cases)]
+  dt_d <-  (log(2) / log(1 + (r_d)))
+  
+  sd_r <-c()
+  sd_dt <-c()
+  for(t in 1:(length(t.start)-1)){
+    
+    sd_r <- c(sd_r, sd(r_d[which(dat$date %in% seq(start.time[t], end.time[t], 1))]))
+    sd_dt <- c(sd_dt, sd(dt_d[which(dat$date %in% seq(start.time[t], end.time[t], 1))]))
+    
+  }
+  sd_r <- c(sd_r, sd_r[(length(t.start)-1)])
+  sd_dt <- c(sd_dt, sd_dt[(length(t.start)-1)])
+  
+  
+  return(data.frame(date=as.Date(end.time, origin="1970-01-01"),r=r, r_ci_low = r + qnorm(alpha/2)*sd_r, r_ci_up = r + qnorm(1-alpha/2)*sd_r,
+                    dt=dt, dt_ci_low = dt + qnorm(alpha/2)*sd_dt, dt_ci_up = dt + qnorm(1-alpha/2)*sd_dt))
+  
+}
+
+
+db_mumbai <- compute_doubling_time(total_cases = mumbai_recent$Confirmed,
+case_dates = mumbai_recent$Date, time.gap = 7, alpha = 0.95)
+
+glimpse(db_mumbai)
+
+###########################################################################
+# the code till now has been verified and confirmed as running and bug free.
+###########################################################################
+
+
+
+
+
+
+
+
+
+
+
 
 
 Rt_EpiNow2 <- estimates_mumbai_recent$estimates$summarised
@@ -154,13 +265,18 @@ write.csv(Rt_tab, "Rt_mumbai_0701_1115_byLJ.csv")
 
 #### doublingg time##
 
+
 case_series<- ## take out delta case##
-tot_cases_mumbai<- mumbai_recent[,3]## take out delta case##
-case_dates_mumbai <- mumbai_recent_tab[,1]
+
+
+tot_cases_mumbai<- mumbai_recent$Confirmed
+## take out delta case##
+case_dates_mumbai <- mumbai_recent$Date
 
 #case_series=case_series_mumbai; total_cases=tot_cases_mumbai; case_dates=case_dates_mumbai; time.gap=7
 
-doubling_time_mumbai<-compute_doubling_time(total_cases=tot_cases_mumbai, case_dates=case_dates_mumbai , time.gap=7)
+doubling_time_mumbai<-compute_doubling_time(total_cases=tot_cases_mumbai, 
+case_dates=case_dates_mumbai , time.gap=7)
 
 write.csv(doubling_time_mumbai, "douling_time_mumbai_070120_111620.csv")
 
